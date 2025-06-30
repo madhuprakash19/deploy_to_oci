@@ -5,7 +5,7 @@ app = FastAPI()
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to my FastAPI APP!"}
+    return {"message": "Welcome to my FastAPI Oracle!"}
 
 @app.get("/test")
 def test_endpoint():
