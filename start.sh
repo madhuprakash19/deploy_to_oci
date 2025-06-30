@@ -1,6 +1,7 @@
 #!/bin/bash
 
-cd ~/my-fastapi-app
+cd ~/deploy_to_oci
 source venv/bin/activate
 pip install -r requirements.txt
-nohup uvicorn app:app --host 0.0.0.0 --port 8000 --reload > output.log 2>&1 &
+pkill -f uvicorn || true
+nohup venv/bin/uvicorn app:app --host 0.0.0.0 --port 5002 > app.log 2>&1 &
