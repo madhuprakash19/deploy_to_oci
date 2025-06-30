@@ -1,0 +1,70 @@
+name: Deploy FastAPI to Oracle Cloud
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: SSH & Deploy to Oracle VM
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.VM_HOST }}
+        username: ${{ secrets.VM_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        script: |
+          set -e
+          echo "Starting deployment..."
+
+          # Backup current version
+          if [ -d ~/deploy_to_oci ]; then
+            mv ~/deploy_to_oci ~/deploy_to_oci_backup_$(date +%s)
+          fi
+
+          # Clone latest code
+          git clone https://github.com/${{ github.repository }} ~/deploy_to_oci
+          cd ~/deploy_to_oci
+
+          # Set up Python env
+          if [ ! -d venv ]; then
+            python3 -m venv venv
+          fi
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+          # Run start script
+          chmod +x start.sh
+          ./start.sh
+
+          sleep 5
+
+          # Health check
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/test)
+
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ App is running properly on /test"
+          else
+            echo "❌ Health check failed. Rolling back..."
+
+            pkill -f uvicorn || true
+
+            BACKUP_DIR=$(ls -td ~/deploy_to_oci_backup_* | head -1)
+            if [ -n "$BACKUP_DIR" ]; then
+              mv ~/deploy_to_oci ~/deploy_to_oci_broken_$(date +%s)
+              mv "$BACKUP_DIR" ~/deploy_to_oci
+              cd ~/deploy_to_oci
+              source venv/bin/activate
+              nohup venv/bin/uvicorn app:app --host 0.0.0.0 --port 5002 > app.log 2>&1 &
+              echo "✅ Rollback complete"
+            else
+              echo "⚠️ No backup found. Rollback failed"
+              exit 1
+            fi
+          fi
